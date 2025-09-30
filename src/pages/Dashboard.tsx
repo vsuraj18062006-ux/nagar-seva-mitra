@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Navigation from "@/components/ui/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -6,54 +6,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MapPin, Clock, CheckCircle, AlertTriangle, Search, Filter, Eye } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useQuery } from "@tanstack/react-query";
 
-// Mock data for issues
-const mockIssues = [
-  {
-    id: "CW2847",
-    title: "Large pothole on MG Road",
-    category: "Roads & Infrastructure",
-    severity: "high",
-    status: "in-progress",
-    location: "MG Road, Near Metro Station",
-    reportedDate: "2024-01-15",
-    upvotes: 23,
-    comments: 5
-  },
-  {
-    id: "CW2846",
-    title: "Street light not working",
-    category: "Street Lighting",
-    severity: "medium",
-    status: "acknowledged",
-    location: "Park Street, Block A",
-    reportedDate: "2024-01-14",
-    upvotes: 12,
-    comments: 2
-  },
-  {
-    id: "CW2845",
-    title: "Garbage not collected for 3 days",
-    category: "Waste Management",
-    severity: "high",
-    status: "reported",
-    location: "Sector 15, Residential Area",
-    reportedDate: "2024-01-13",
-    upvotes: 45,
-    comments: 8
-  },
-  {
-    id: "CW2844",
-    title: "Water logging during rain",
-    category: "Water & Drainage",
-    severity: "critical",
-    status: "resolved",
-    location: "Main Market Road",
-    reportedDate: "2024-01-12",
-    upvotes: 67,
-    comments: 15
-  }
-];
+const categoryLabels: Record<string, string> = {
+  roads: "Roads & Infrastructure",
+  lighting: "Street Lighting",
+  waste: "Waste Management",
+  water: "Water & Drainage",
+  traffic: "Traffic & Transport",
+  environment: "Parks & Environment"
+};
 
 const getStatusColor = (status: string) => {
   switch (status) {
@@ -80,7 +43,20 @@ const Dashboard = () => {
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterCategory, setFilterCategory] = useState("all");
 
-  const filteredIssues = mockIssues.filter(issue => {
+  const { data: issues = [], isLoading } = useQuery({
+    queryKey: ['issues'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('issues')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      return data;
+    }
+  });
+
+  const filteredIssues = issues.filter(issue => {
     const matchesSearch = issue.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          issue.location.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = filterStatus === "all" || issue.status === filterStatus;
@@ -88,6 +64,11 @@ const Dashboard = () => {
     
     return matchesSearch && matchesStatus && matchesCategory;
   });
+
+  const totalIssues = issues.length;
+  const inProgressIssues = issues.filter(i => i.status === 'in-progress').length;
+  const resolvedIssues = issues.filter(i => i.status === 'resolved').length;
+  const reportedIssues = issues.filter(i => i.status === 'reported').length;
 
   return (
     <div className="min-h-screen bg-background">
@@ -107,7 +88,7 @@ const Dashboard = () => {
               <div className="flex items-center space-x-2">
                 <AlertTriangle className="h-8 w-8 text-primary" />
                 <div>
-                  <p className="text-2xl font-bold">247</p>
+                  <p className="text-2xl font-bold">{isLoading ? '-' : totalIssues}</p>
                   <p className="text-sm text-muted-foreground">Total Reports</p>
                 </div>
               </div>
@@ -118,7 +99,7 @@ const Dashboard = () => {
               <div className="flex items-center space-x-2">
                 <Clock className="h-8 w-8 text-orange-500" />
                 <div>
-                  <p className="text-2xl font-bold">89</p>
+                  <p className="text-2xl font-bold">{isLoading ? '-' : inProgressIssues}</p>
                   <p className="text-sm text-muted-foreground">In Progress</p>
                 </div>
               </div>
@@ -129,7 +110,7 @@ const Dashboard = () => {
               <div className="flex items-center space-x-2">
                 <CheckCircle className="h-8 w-8 text-green-500" />
                 <div>
-                  <p className="text-2xl font-bold">158</p>
+                  <p className="text-2xl font-bold">{isLoading ? '-' : resolvedIssues}</p>
                   <p className="text-sm text-muted-foreground">Resolved</p>
                 </div>
               </div>
@@ -138,10 +119,10 @@ const Dashboard = () => {
           <Card>
             <CardContent className="p-6">
               <div className="flex items-center space-x-2">
-                <MapPin className="h-8 w-8 text-blue-500" />
+                <AlertTriangle className="h-8 w-8 text-blue-500" />
                 <div>
-                  <p className="text-2xl font-bold">12</p>
-                  <p className="text-sm text-muted-foreground">Avg Days</p>
+                  <p className="text-2xl font-bold">{isLoading ? '-' : reportedIssues}</p>
+                  <p className="text-sm text-muted-foreground">Reported</p>
                 </div>
               </div>
             </CardContent>
@@ -181,10 +162,12 @@ const Dashboard = () => {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Categories</SelectItem>
-                  <SelectItem value="Roads & Infrastructure">Roads & Infrastructure</SelectItem>
-                  <SelectItem value="Street Lighting">Street Lighting</SelectItem>
-                  <SelectItem value="Waste Management">Waste Management</SelectItem>
-                  <SelectItem value="Water & Drainage">Water & Drainage</SelectItem>
+                  <SelectItem value="roads">Roads & Infrastructure</SelectItem>
+                  <SelectItem value="lighting">Street Lighting</SelectItem>
+                  <SelectItem value="waste">Waste Management</SelectItem>
+                  <SelectItem value="water">Water & Drainage</SelectItem>
+                  <SelectItem value="traffic">Traffic & Transport</SelectItem>
+                  <SelectItem value="environment">Parks & Environment</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -192,55 +175,54 @@ const Dashboard = () => {
         </Card>
 
         {/* Issues List */}
-        <div className="space-y-4">
-          {filteredIssues.map((issue) => (
-            <Card key={issue.id} className="hover:shadow-card-custom transition-shadow">
-              <CardContent className="p-6">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-2">
-                      <Badge variant="outline" className="font-mono">
-                        {issue.id}
-                      </Badge>
-                      <Badge className={`${getStatusColor(issue.status)} text-white`}>
-                        {issue.status.replace("-", " ").toUpperCase()}
-                      </Badge>
-                      <Badge className={`${getSeverityColor(issue.severity)} text-white`}>
-                        {issue.severity.toUpperCase()}
-                      </Badge>
+        {isLoading ? (
+          <div className="text-center py-12">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+            <p className="mt-4 text-muted-foreground">Loading issues...</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {filteredIssues.map((issue) => (
+              <Card key={issue.id} className="hover:shadow-card-custom transition-shadow">
+                <CardContent className="p-6">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-2">
+                        <Badge variant="outline" className="font-mono">
+                          #{issue.id.slice(0, 8)}
+                        </Badge>
+                        <Badge className={`${getStatusColor(issue.status)} text-white`}>
+                          {issue.status.replace("-", " ").toUpperCase()}
+                        </Badge>
+                        <Badge className={`${getSeverityColor(issue.severity)} text-white`}>
+                          {issue.severity.toUpperCase()}
+                        </Badge>
+                      </div>
+                      <h3 className="font-semibold text-lg mb-2">{issue.title}</h3>
+                      <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
+                        <div className="flex items-center gap-1">
+                          <MapPin className="h-4 w-4" />
+                          {issue.location}
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Clock className="h-4 w-4" />
+                          {new Date(issue.created_at).toLocaleDateString()}
+                        </div>
+                        <Badge variant="secondary">{categoryLabels[issue.category] || issue.category}</Badge>
+                      </div>
                     </div>
-                    <h3 className="font-semibold text-lg mb-2">{issue.title}</h3>
-                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                      <div className="flex items-center gap-1">
-                        <MapPin className="h-4 w-4" />
-                        {issue.location}
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Clock className="h-4 w-4" />
-                        {issue.reportedDate}
-                      </div>
-                      <Badge variant="secondary">{issue.category}</Badge>
+                    <div className="flex items-center gap-4">
+                      <Button size="sm" variant="outline">
+                        <Eye className="h-4 w-4 mr-2" />
+                        View
+                      </Button>
                     </div>
                   </div>
-                  <div className="flex items-center gap-4">
-                    <div className="text-center">
-                      <p className="text-lg font-semibold">{issue.upvotes}</p>
-                      <p className="text-xs text-muted-foreground">upvotes</p>
-                    </div>
-                    <div className="text-center">
-                      <p className="text-lg font-semibold">{issue.comments}</p>
-                      <p className="text-xs text-muted-foreground">comments</p>
-                    </div>
-                    <Button size="sm" variant="outline">
-                      <Eye className="h-4 w-4 mr-2" />
-                      View
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
 
         {filteredIssues.length === 0 && (
           <Card className="text-center py-12">

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,6 +10,8 @@ import { Badge } from "@/components/ui/badge";
 import Navigation from "@/components/ui/navigation";
 import { Camera, MapPin, Upload, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 
 const categories = [
   { value: "roads", label: "Roads & Infrastructure", color: "bg-orange-500" },
@@ -29,20 +32,61 @@ const ReportIssue = () => {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
+  const { user } = useAuth();
+  const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!user) {
+      toast({
+        title: "Error",
+        description: "You must be logged in to report an issue",
+        variant: "destructive"
+      });
+      return;
+    }
+
     setIsSubmitting(true);
     
-    // Simulate API call
-    setTimeout(() => {
+    try {
+      const { data, error } = await supabase
+        .from('issues')
+        .insert([{
+          user_id: user.id,
+          title: formData.title,
+          description: formData.description,
+          category: formData.category,
+          severity: formData.severity,
+          location: formData.location,
+          status: 'reported'
+        }])
+        .select()
+        .single();
+
+      if (error) throw error;
+
       toast({
         title: "Issue Reported Successfully!",
-        description: `Your report #CW${Math.floor(Math.random() * 10000)} has been submitted and will be reviewed by the relevant department.`,
+        description: `Your report has been submitted and will be reviewed by the relevant department.`,
       });
-      setIsSubmitting(false);
+      
       setFormData({ title: "", description: "", category: "", severity: "", location: "" });
-    }, 2000);
+      
+      // Navigate to dashboard after 1 second
+      setTimeout(() => {
+        navigate('/dashboard');
+      }, 1000);
+      
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to submit report. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
